@@ -3,7 +3,7 @@ import 'dotenv/config';
 export const config = {
   token: process.env.DISCORD_TOKEN,
   clientId: process.env.CLIENT_ID,
-  guildId: process.env.GUILD_ID || null,
+  guildId: process.env.DISCORD_GUILD_ID || process.env.GUILD_ID || null,
 };
 
 export function validateConfig() {

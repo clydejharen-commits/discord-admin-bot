@@ -35,7 +35,7 @@ Both commands require the **Administrator** Discord permission.
 |----------|----------|-------------|
 | `DISCORD_TOKEN` | Yes | Bot token from the Discord Developer Portal |
 | `CLIENT_ID` | Yes | Application/Bot client ID |
-| `GUILD_ID` | No | Guild ID for dev command registration (omit for global) |
+| `DISCORD_GUILD_ID` | No | Guild ID for instant guild-specific command registration (omit for global, which can take up to 1 hour) |
 
 ## Project Structure
 
@@ -53,12 +53,13 @@ src/
   utils/
     permissions.js      - Administrator permission check
     validate.js         - URL and color validation
+    register-commands.js - Shared slash command registration logic
 ```
 
 ## Railway Deployment
 
 1. Push this repository to GitHub.
 2. Create a new project on [Railway](https://railway.app) and connect the repository.
-3. Add the `DISCORD_TOKEN`, `CLIENT_ID`, and `GUILD_ID` environment variables in Railway.
+3. Add the `DISCORD_TOKEN`, `CLIENT_ID`, and `DISCORD_GUILD_ID` environment variables in Railway.
 4. Set the build command to `npm install` and the start command to `npm start`.
-5. Run `npm run deploy` once after the bot starts (or locally) to register slash commands.
+5. Slash commands are registered automatically when the bot starts. You can also run `npm run deploy` manually if needed.
