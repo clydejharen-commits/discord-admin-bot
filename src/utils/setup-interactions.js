@@ -12,7 +12,7 @@ import {
   TextInputStyle,
 } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
-import { getSettings, saveSettings } from '../utils/tracker-db.js';
+import { getSettings, saveSettings, getQuarantineSettings, saveQuarantineSettings } from '../utils/tracker-db.js';
 import { isValidUrl } from '../utils/validate.js';
 
 // ---------------------------------------------------------------------------
@@ -228,9 +228,79 @@ function getSetupDashboardComponents() {
         .setCustomId('setup_tracker_settings')
         .setLabel('Tracker Settings')
         .setEmoji('⚙️')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('setup_mod_settings')
+        .setLabel('Mod Settings')
+        .setEmoji('🛡️')
         .setStyle(ButtonStyle.Secondary)
     ),
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Mod Settings panel
+// ---------------------------------------------------------------------------
+
+const MOD_SETTINGS_COLOR = 0x2f3136;
+
+async function getModSettingsEmbed() {
+  const settings = await getQuarantineSettings();
+
+  const staffRole = settings?.quarantineStaffRoleId
+    ? `<@&${settings.quarantineStaffRoleId}>`
+    : '❌ Not configured';
+  const logsChannel = settings?.quarantineLogChannelId
+    ? `<#${settings.quarantineLogChannelId}>`
+    : '❌ Not configured';
+  const quarantineRole = settings?.quarantineRoleId
+    ? `<@&${settings.quarantineRoleId}>`
+    : '❌ Not configured';
+
+  return new EmbedBuilder()
+    .setTitle('🛡️ Mod Settings')
+    .setDescription('Configure the quarantine system for this server.')
+    .addFields(
+      { name: 'Quarantine Staff Role', value: staffRole, inline: true },
+      { name: 'Quarantine Log Channel', value: logsChannel, inline: true },
+      { name: 'Quarantine Role', value: quarantineRole, inline: true }
+    )
+    .setColor(MOD_SETTINGS_COLOR);
+}
+
+function getModSettingsComponents() {
+  const roleSelectRow = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId('mod_select_staff_role')
+      .setPlaceholder('Select Quarantine Staff role')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+
+  const channelSelectRow = new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId('mod_select_log_channel')
+      .setPlaceholder('Select Quarantine Log channel')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+
+  const quarantineRoleRow = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId('mod_select_quarantine_role')
+      .setPlaceholder('Select Quarantine Role')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+
+  const backButtonRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_back')
+      .setLabel('Back')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return [roleSelectRow, channelSelectRow, quarantineRoleRow, backButtonRow];
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +321,21 @@ export async function handleSetupInteraction(interaction) {
       await interaction.deferUpdate();
       const embed = getSetupDashboardEmbed();
       const components = getSetupDashboardComponents();
+      await interaction.editReply({ embeds: [embed], components });
+      return;
+    }
+
+    // -- Mod Settings --
+    if (interaction.customId === 'setup_mod_settings') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
       return;
     }
@@ -645,6 +730,99 @@ export async function handleSetupInteraction(interaction) {
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
+      return;
+    }
+  }
+
+  // ---- Mod Settings: role/channel select menus --------------------------
+  if (interaction.isRoleSelectMenu() || interaction.isChannelSelectMenu()) {
+    // Quarantine Staff role
+    if (interaction.customId === 'mod_select_staff_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0];
+      try {
+        const existing = await getQuarantineSettings();
+        await saveQuarantineSettings({
+          quarantineStaffRoleId: roleId,
+          quarantineLogChannelId: existing?.quarantineLogChannelId,
+          quarantineRoleId: existing?.quarantineRoleId,
+        });
+      } catch (error) {
+        console.error('Mod Settings: failed to save staff role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getModSettingsComponents(),
+        });
+      }
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
+      await interaction.editReply({ content: '✅ Quarantine Staff role updated.', embeds: [embed], components });
+      return;
+    }
+
+    // Quarantine Role
+    if (interaction.customId === 'mod_select_quarantine_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0];
+      try {
+        const existing = await getQuarantineSettings();
+        await saveQuarantineSettings({
+          quarantineStaffRoleId: existing?.quarantineStaffRoleId,
+          quarantineLogChannelId: existing?.quarantineLogChannelId,
+          quarantineRoleId: roleId,
+        });
+      } catch (error) {
+        console.error('Mod Settings: failed to save quarantine role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getModSettingsComponents(),
+        });
+      }
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
+      await interaction.editReply({ content: '✅ Quarantine Role updated.', embeds: [embed], components });
+      return;
+    }
+
+    // Quarantine Log channel
+    if (interaction.customId === 'mod_select_log_channel') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const channelId = interaction.values[0];
+      try {
+        const existing = await getQuarantineSettings();
+        await saveQuarantineSettings({
+          quarantineStaffRoleId: existing?.quarantineStaffRoleId,
+          quarantineLogChannelId: channelId,
+          quarantineRoleId: existing?.quarantineRoleId,
+        });
+      } catch (error) {
+        console.error('Mod Settings: failed to save log channel:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getModSettingsComponents(),
+        });
+      }
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
+      await interaction.editReply({ content: '✅ Quarantine Log channel updated.', embeds: [embed], components });
       return;
     }
   }

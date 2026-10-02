@@ -34,3 +34,43 @@ export async function saveSettings(settings) {
     { upsert: true }
   );
 }
+
+// ---------------------------------------------------------------------------
+// Quarantine
+// ---------------------------------------------------------------------------
+
+export async function getQuarantineSettings() {
+  const db = getDb();
+  return db.collection('settings').findOne({ _id: 'quarantine_settings' });
+}
+
+export async function saveQuarantineSettings(settings) {
+  const db = getDb();
+  await db.collection('settings').updateOne(
+    { _id: 'quarantine_settings' },
+    { $set: { _id: 'quarantine_settings', ...settings } },
+    { upsert: true }
+  );
+}
+
+export async function createQuarantineRecord(record) {
+  const db = getDb();
+  await db.collection('quarantines').insertOne(record);
+}
+
+export async function getActiveQuarantine(guildId, userId) {
+  const db = getDb();
+  return db.collection('quarantines').findOne({
+    guildId,
+    userId,
+    active: true,
+  });
+}
+
+export async function deactivateQuarantineRecord(guildId, userId) {
+  const db = getDb();
+  await db.collection('quarantines').updateOne(
+    { guildId, userId, active: true },
+    { $set: { active: false, unquarinedAt: Date.now() } }
+  );
+}
