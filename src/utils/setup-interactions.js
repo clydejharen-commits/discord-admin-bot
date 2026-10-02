@@ -52,7 +52,7 @@ function getTrackerSettingsComponents() {
       .addOptions(
         { label: 'Select a Role', value: 'pick_role', emoji: '🏷️' },
         { label: 'Select a User', value: 'pick_user', emoji: '👤' },
-        { label: 'Clear Completion Ping', value: 'clear_ping', emoji: '🗑️' }
+        label: 'Clear Completion Ping', value: 'clear_ping', emoji: '🗑️' }
       )
   );
 
@@ -66,28 +66,10 @@ function getTrackerSettingsComponents() {
   return [channelRow, pingRow, backButtonRow];
 }
 
-async function getSetupDashboardEmbed() {
-  const settings = await getSettings();
-
-  const trackingChannel = settings?.trackingChannelId
-    ? `<#${settings.trackingChannelId}>`
-    : 'Not configured';
-
-  let completionPing = 'Not configured';
-  if (settings?.completionPingType && settings?.completionPingId) {
-    if (settings.completionPingType === 'role') {
-      completionPing = `<@&${settings.completionPingId}>`;
-    } else if (settings.completionPingType === 'user') {
-      completionPing = `<@${settings.completionPingId}>`;
-    }
-  }
-
+function getSetupDashboardEmbed() {
   return new EmbedBuilder()
     .setTitle('Bot Setup')
-    .addFields(
-      { name: 'Tracking Channel', value: trackingChannel, inline: true },
-      { name: 'Completion Ping', value: completionPing, inline: true }
-    )
+    .setDescription('Manage and configure your bot\'s features using the options below.')
     .setColor(0x2f3136);
 }
 
@@ -112,9 +94,10 @@ export async function handleSetupInteraction(interaction) {
           ephemeral: true,
         });
       }
+      await interaction.deferUpdate();
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
 
@@ -125,23 +108,18 @@ export async function handleSetupInteraction(interaction) {
           ephemeral: true,
         });
       }
-      const embed = await getSetupDashboardEmbed();
+      await interaction.deferUpdate();
+      const embed = getSetupDashboardEmbed();
       const components = getSetupDashboardComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
 
-    if (interaction.customId === 'tracker_cancel_role') {
+    if (interaction.customId === 'tracker_cancel_role' || interaction.customId === 'tracker_cancel_user') {
+      await interaction.deferUpdate();
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
-      return;
-    }
-
-    if (interaction.customId === 'tracker_cancel_user') {
-      const embed = await getTrackerSettingsEmbed();
-      const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
   }
@@ -155,17 +133,27 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
+      await interaction.deferUpdate();
       const choice = interaction.values[0];
 
       if (choice === 'clear_ping') {
-        await saveSettings({
-          trackingChannelId: (await getSettings())?.trackingChannelId,
-          completionPingType: null,
-          completionPingId: null,
-        });
+        try {
+          const existing = await getSettings();
+          await saveSettings({
+            trackingChannelId: existing?.trackingChannelId,
+            completionPingType: null,
+            completionPingId: null,
+          });
+        } catch (error) {
+          console.error('Tracker Settings: failed to clear ping:', error.message);
+          return interaction.editReply({
+            content: 'An error occurred while saving the configuration. Please try again.',
+            components: getTrackerSettingsComponents(),
+          });
+        }
         const embed = await getTrackerSettingsEmbed();
         const components = getTrackerSettingsComponents();
-        await interaction.update({ embeds: [embed], components });
+        await interaction.editReply({ embeds: [embed], components });
         return;
       }
 
@@ -184,7 +172,7 @@ export async function handleSetupInteraction(interaction) {
             .setStyle(ButtonStyle.Secondary)
         );
         const embed = await getTrackerSettingsEmbed();
-        await interaction.update({ embeds: [embed], components: [roleSelectRow, cancelButtonRow] });
+        await interaction.editReply({ embeds: [embed], components: [roleSelectRow, cancelButtonRow] });
         return;
       }
 
@@ -203,7 +191,7 @@ export async function handleSetupInteraction(interaction) {
             .setStyle(ButtonStyle.Secondary)
         );
         const embed = await getTrackerSettingsEmbed();
-        await interaction.update({ embeds: [embed], components: [userSelectRow, cancelButtonRow] });
+        await interaction.editReply({ embeds: [embed], components: [userSelectRow, cancelButtonRow] });
         return;
       }
     }
@@ -216,16 +204,27 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
+      await interaction.deferUpdate();
       const roleId = interaction.values[0];
-      const existingSettings = await getSettings();
-      await saveSettings({
-        trackingChannelId: existingSettings?.trackingChannelId,
-        completionPingType: 'role',
-        completionPingId: roleId,
-      });
+
+      try {
+        const existing = await getSettings();
+        await saveSettings({
+          trackingChannelId: existing?.trackingChannelId,
+          completionPingType: 'role',
+          completionPingId: roleId,
+        });
+      } catch (error) {
+        console.error('Tracker Settings: failed to save role ping:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getTrackerSettingsComponents(),
+        });
+      }
+
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
 
@@ -237,16 +236,27 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
+      await interaction.deferUpdate();
       const userId = interaction.values[0];
-      const existingSettings = await getSettings();
-      await saveSettings({
-        trackingChannelId: existingSettings?.trackingChannelId,
-        completionPingType: 'user',
-        completionPingId: userId,
-      });
+
+      try {
+        const existing = await getSettings();
+        await saveSettings({
+          trackingChannelId: existing?.trackingChannelId,
+          completionPingType: 'user',
+          completionPingId: userId,
+        });
+      } catch (error) {
+        console.error('Tracker Settings: failed to save user ping:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getTrackerSettingsComponents(),
+        });
+      }
+
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
   }
@@ -260,16 +270,27 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
+      await interaction.deferUpdate();
       const channelId = interaction.values[0];
-      const existingSettings = await getSettings();
-      await saveSettings({
-        trackingChannelId: channelId,
-        completionPingType: existingSettings?.completionPingType,
-        completionPingId: existingSettings?.completionPingId,
-      });
+
+      try {
+        const existing = await getSettings();
+        await saveSettings({
+          trackingChannelId: channelId,
+          completionPingType: existing?.completionPingType,
+          completionPingId: existing?.completionPingId,
+        });
+      } catch (error) {
+        console.error('Tracker Settings: failed to save channel:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getTrackerSettingsComponents(),
+        });
+      }
+
       const embed = await getTrackerSettingsEmbed();
       const components = getTrackerSettingsComponents();
-      await interaction.update({ embeds: [embed], components });
+      await interaction.editReply({ embeds: [embed], components });
       return;
     }
   }
