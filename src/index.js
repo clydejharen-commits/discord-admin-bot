@@ -3,6 +3,7 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, validateConfig } from './config.js';
+import { connectDatabase } from './utils/database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,8 +13,9 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel, Partials.Message],
 });
 
 client.commands = new Map();
@@ -52,6 +54,7 @@ async function loadEvents() {
 
 async function main() {
   validateConfig();
+  await connectDatabase();
   await loadCommands();
   await loadEvents();
   await client.login(config.token);

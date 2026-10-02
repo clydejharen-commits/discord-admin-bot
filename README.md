@@ -1,20 +1,36 @@
 # Discord Admin Bot
 
-A modular Discord bot built with Discord.js v14 and Node.js. Provides administrator-only slash commands for message management and embed creation.
+A modular Discord bot built with Discord.js v14 and Node.js. Provides administrator-only slash commands for message management, embed creation, and Roblox follower tracking.
 
 ## Commands
 
 | Command | Description |
 |--------|-------------|
-| `/purge <amount> [message_id]` | Delete a number of recent messages. Optionally exclude a specific message by ID. |
 | `/embed <title> <description> [color] [image] [thumbnail] [footer]` | Send a formatted embed message with optional color, image, thumbnail, and footer. |
+| `/reaction <messageid> <emojis>` | Add reactions to a message in the current channel. |
+| `/track <roblox_username> <milestone>` | Start tracking a Roblox user's follower count toward a milestone. |
+| `/setup` | Open the bot setup dashboard to configure tracker settings. |
+| `q. Track stop` | Stop the currently active follower tracker (prefix command). |
 
-Both commands require the **Administrator** Discord permission.
+All commands require the **Administrator** Discord permission.
+
+## Tracker System
+
+The bot tracks a Roblox user's follower count and posts updates in a configured Discord channel:
+
+- Only one tracker can be active at a time.
+- The tracker survives bot restarts (stored in MongoDB).
+- When the follower milestone is reached, a completion embed is posted and the configured role/user is pinged.
+- Use `q. Track stop` to stop tracking.
+
+Use `/setup` to configure:
+- **Tracking Channel** — where tracker embeds are posted.
+- **Completion Ping** — a role or user to mention when the milestone is reached.
 
 ## Setup
 
 1. Create a bot application at the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Copy `.env.example` to `.env` and fill in your bot token and client ID.
+2. Copy `.env.example` to `.env` and fill in your bot token, client ID, and MongoDB URI.
 3. Invite the bot to your server with the `applications.commands` and `bot` scopes.
 4. Install dependencies:
    ```bash
@@ -36,30 +52,40 @@ Both commands require the **Administrator** Discord permission.
 | `DISCORD_TOKEN` | Yes | Bot token from the Discord Developer Portal |
 | `CLIENT_ID` | Yes | Application/Bot client ID |
 | `DISCORD_GUILD_ID` | No | Guild ID for instant guild-specific command registration (omit for global, which can take up to 1 hour) |
+| `MONGO_URI` | Yes | MongoDB connection string for tracker persistence |
 
 ## Project Structure
 
 ```
 src/
-  index.js              - Bot entry point
-  deploy-commands.js    - Slash command registration script
-  config.js             - Environment variable loading and validation
+  index.js               - Bot entry point
+  deploy-commands.js     - Slash command registration script
+  config.js              - Environment variable loading and validation
   commands/
-    purge.js            - /purge command
-    embed.js            - /embed command
+    embed.js             - /embed command
+    reaction.js          - /reaction command
+    track.js             - /track command
+    setup.js             - /setup command
   events/
-    ready.js            - Bot ready event
-    interactionCreate.js - Slash command interaction handler
+    ready.js             - Bot ready event (registration + tracker restore)
+    interactionCreate.js - Slash command + component interaction handler
+    messageCreate.js     - Prefix command handler (q. Track stop)
+  services/
+    tracker-service.js   - Follower checking loop and completion logic
   utils/
-    permissions.js      - Administrator permission check
-    validate.js         - URL and color validation
+    permissions.js       - Administrator permission check
+    validate.js          - URL and color validation
     register-commands.js - Shared slash command registration logic
+    database.js          - MongoDB connection manager
+    tracker-db.js        - Tracker and settings database operations
+    roblox.js            - Roblox API utilities
+    setup-interactions.js - Setup dashboard button/select handlers
 ```
 
 ## Railway Deployment
 
 1. Push this repository to GitHub.
 2. Create a new project on [Railway](https://railway.app) and connect the repository.
-3. Add the `DISCORD_TOKEN`, `CLIENT_ID`, and `DISCORD_GUILD_ID` environment variables in Railway.
+3. Add the `DISCORD_TOKEN`, `CLIENT_ID`, `DISCORD_GUILD_ID`, and `MONGO_URI` environment variables in Railway.
 4. Set the build command to `npm install` and the start command to `npm start`.
 5. Slash commands are registered automatically when the bot starts. You can also run `npm run deploy` manually if needed.

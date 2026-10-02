@@ -1,31 +1,54 @@
+import { handleSetupInteraction } from '../utils/setup-interactions.js';
+
 export const name = 'interactionCreate';
 
 export async function execute(interaction) {
-  if (!interaction.isChatInputCommand()) return;
+  if (interaction.isChatInputCommand()) {
+    const command = interaction.client.commands.get(interaction.commandName);
 
-  const command = interaction.client.commands.get(interaction.commandName);
+    if (!command) {
+      console.warn(`Unknown command received: ${interaction.commandName}`);
+      return;
+    }
 
-  if (!command) {
-    console.warn(`Unknown command received: ${interaction.commandName}`);
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      console.error(`Error executing command ${interaction.commandName}:`, error);
+
+      const payload = {
+        content: 'An error occurred while executing this command.',
+        ephemeral: true,
+      };
+
+      if (interaction.deferred) {
+        await interaction.editReply(payload).catch(() => {});
+      } else if (interaction.replied) {
+        await interaction.followUp(payload).catch(() => {});
+      } else {
+        await interaction.reply(payload).catch(() => {});
+      }
+    }
     return;
   }
 
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(`Error executing command ${interaction.commandName}:`, error);
+  if (interaction.isButton() || interaction.isAnySelectMenu()) {
+    try {
+      await handleSetupInteraction(interaction);
+    } catch (error) {
+      console.error('Error handling component interaction:', error);
 
-    const payload = {
-      content: 'An error occurred while executing this command.',
-      ephemeral: true,
-    };
+      const payload = {
+        content: 'An error occurred while handling this interaction.',
+        ephemeral: true,
+      };
 
-    if (interaction.deferred) {
-      await interaction.editReply(payload).catch(() => {});
-    } else if (interaction.replied) {
-      await interaction.followUp(payload).catch(() => {});
-    } else {
-      await interaction.reply(payload).catch(() => {});
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(payload).catch(() => {});
+      } else {
+        await interaction.reply(payload).catch(() => {});
+      }
     }
+    return;
   }
 }
