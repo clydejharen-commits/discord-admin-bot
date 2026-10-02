@@ -114,13 +114,13 @@ function getAppearanceComponents() {
       .setCustomId('appearance_set_bio')
       .setLabel('Bot Bio')
       .setEmoji('✏️')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
   );
 
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('appearance_reset_avatar')
-      .setLabel('Reset Profile')
+      .setLabel('Reset Avatar')
       .setEmoji('🔄')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -374,8 +374,7 @@ export async function handleSetupInteraction(interaction) {
       }
       await interaction.deferUpdate();
       try {
-        const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-        await botMember.editMe({ avatar: null });
+        await interaction.guild.members.editMe({ avatar: null });
       } catch (error) {
         console.error('Appearance: failed to reset avatar:', error.message);
         const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
@@ -407,8 +406,7 @@ export async function handleSetupInteraction(interaction) {
       }
       await interaction.deferUpdate();
       try {
-        const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-        await botMember.editMe({ banner: null });
+        await interaction.guild.members.editMe({ banner: null });
       } catch (error) {
         console.error('Appearance: failed to reset banner:', error.message);
         const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
@@ -440,8 +438,7 @@ export async function handleSetupInteraction(interaction) {
       }
       await interaction.deferUpdate();
       try {
-        const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-        await botMember.editMe({ bio: null });
+        await interaction.guild.members.editMe({ bio: null });
       } catch (error) {
         console.error('Appearance: failed to reset bio:', error.message);
         const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
@@ -672,8 +669,7 @@ export async function handleAppearanceModalSubmit(interaction) {
     }
 
     try {
-      const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-      await botMember.editMe({ avatar: dataUri });
+      await interaction.guild.members.editMe({ avatar: dataUri });
     } catch (error) {
       console.error('Appearance: failed to set avatar:', error.message);
       return interaction.editReply({
@@ -698,8 +694,7 @@ export async function handleAppearanceModalSubmit(interaction) {
     }
 
     try {
-      const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-      await botMember.editMe({ banner: dataUri });
+      await interaction.guild.members.editMe({ banner: dataUri });
     } catch (error) {
       console.error('Appearance: failed to set banner:', error.message);
       return interaction.editReply({
@@ -717,8 +712,7 @@ export async function handleAppearanceModalSubmit(interaction) {
     const bioText = interaction.fields.getTextInputValue('bio_text').trim();
 
     try {
-      const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
-      await botMember.editMe({ bio: bioText });
+      await interaction.guild.members.editMe({ bio: bioText });
     } catch (error) {
       console.error('Appearance: failed to set bio:', error.message);
       return interaction.editReply({
