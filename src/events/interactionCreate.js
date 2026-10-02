@@ -1,4 +1,4 @@
-import { handleSetupInteraction } from '../utils/setup-interactions.js';
+import { handleSetupInteraction, handleAppearanceModalSubmit } from '../utils/setup-interactions.js';
 
 export const name = 'interactionCreate';
 
@@ -30,6 +30,30 @@ export async function execute(interaction) {
       }
     }
     return;
+  }
+
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId.startsWith('appearance_modal_')) {
+      try {
+        await handleAppearanceModalSubmit(interaction);
+      } catch (error) {
+        console.error('Error handling appearance modal submit:', error);
+
+        const payload = {
+          content: 'An error occurred while processing your input.',
+          ephemeral: true,
+        };
+
+        if (interaction.deferred) {
+          await interaction.editReply(payload).catch(() => {});
+        } else if (interaction.replied) {
+          await interaction.followUp(payload).catch(() => {});
+        } else {
+          await interaction.reply(payload).catch(() => {});
+        }
+      }
+      return;
+    }
   }
 
   if (interaction.isButton() || interaction.isAnySelectMenu()) {

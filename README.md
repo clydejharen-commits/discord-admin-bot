@@ -9,10 +9,30 @@ A modular Discord bot built with Discord.js v14 and Node.js. Provides administra
 | `/embed <title> <description> [color] [image] [thumbnail] [footer]` | Send a formatted embed message with optional color, image, thumbnail, and footer. |
 | `/reaction <messageid> <emojis>` | Add reactions to a message in the current channel. |
 | `/track <roblox_username> <milestone>` | Start tracking a Roblox user's follower count toward a milestone. |
-| `/setup` | Open the bot setup dashboard to configure tracker settings. |
+| `/setup` | Open the bot setup dashboard to configure bot appearance and tracker settings. |
 | `q. Track stop` | Stop the currently active follower tracker (prefix command). |
 
 All commands require the **Administrator** Discord permission.
+
+## Setup Dashboard
+
+Use `/setup` to open a dashboard with two panels:
+
+### Bot Appearance
+
+Customize the bot's **server-specific** appearance — changes only affect the current server and do not modify the bot's global Discord profile.
+
+- **🖼️ Bot Profile** — Set a server-specific avatar/profile picture from an image URL.
+- **🏳️ Bot Banner** — Set a server-specific banner from an image URL.
+- **✏️ Bot Bio** — Set a server-specific bio/about me via a text input modal.
+- **Reset buttons** — Clear any server-specific avatar, banner, or bio back to the global default.
+
+The bot must have the **Manage Nicknames** permission in the server to modify its own server-specific profile.
+
+### Tracker Settings
+
+- **Tracking Channel** — where tracker embeds are posted.
+- **Completion Ping** — a role or user to mention when the milestone is reached.
 
 ## Tracker System
 
@@ -22,10 +42,6 @@ The bot tracks a Roblox user's follower count and posts updates in a configured 
 - The tracker survives bot restarts (stored in MongoDB).
 - When the follower milestone is reached, a completion embed is posted and the configured role/user is pinged.
 - Use `q. Track stop` to stop tracking.
-
-Use `/setup` to configure:
-- **Tracking Channel** — where tracker embeds are posted.
-- **Completion Ping** — a role or user to mention when the milestone is reached.
 
 ## Setup
 
@@ -68,7 +84,7 @@ src/
     setup.js             - /setup command
   events/
     ready.js             - Bot ready event (registration + tracker restore)
-    interactionCreate.js - Slash command + component interaction handler
+    interactionCreate.js - Slash command + component + modal interaction handler
     messageCreate.js     - Prefix command handler (q. Track stop)
   services/
     tracker-service.js   - Follower checking loop and completion logic
@@ -79,7 +95,7 @@ src/
     database.js          - MongoDB connection manager
     tracker-db.js        - Tracker and settings database operations
     roblox.js            - Roblox API utilities
-    setup-interactions.js - Setup dashboard button/select handlers
+    setup-interactions.js - Setup dashboard button/select/modal handlers (tracker + appearance)
 ```
 
 ## Railway Deployment

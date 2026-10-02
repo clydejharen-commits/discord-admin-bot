@@ -28,10 +28,15 @@ export async function execute(interaction) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
+      .setCustomId('setup_appearance')
+      .setLabel('Bot Appearance')
+      .setEmoji('🎨')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
       .setCustomId('setup_tracker_settings')
       .setLabel('Tracker Settings')
       .setEmoji('⚙️')
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Secondary)
   );
 
   return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
