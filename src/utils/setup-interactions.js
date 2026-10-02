@@ -52,7 +52,7 @@ function getTrackerSettingsComponents() {
       .addOptions(
         { label: 'Select a Role', value: 'pick_role', emoji: '🏷️' },
         { label: 'Select a User', value: 'pick_user', emoji: '👤' },
-        label: 'Clear Completion Ping', value: 'clear_ping', emoji: '🗑️' }
+        { label: 'Clear Completion Ping', value: 'clear_ping', emoji: '🗑️' }
       )
   );
 
