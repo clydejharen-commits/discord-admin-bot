@@ -195,7 +195,9 @@ export async function handleSetupInteraction(interaction) {
         return;
       }
     }
+  }
 
+  if (interaction.isRoleSelectMenu()) {
     if (interaction.customId === 'tracker_select_role') {
       if (!isAdmin(interaction.member)) {
         return interaction.reply({
@@ -227,7 +229,9 @@ export async function handleSetupInteraction(interaction) {
       await interaction.editReply({ embeds: [embed], components });
       return;
     }
+  }
 
+  if (interaction.isUserSelectMenu()) {
     if (interaction.customId === 'tracker_select_user') {
       if (!isAdmin(interaction.member)) {
         return interaction.reply({
