@@ -1,6 +1,5 @@
 import {
   SlashCommandBuilder,
-  PermissionFlagsBits,
   EmbedBuilder,
 } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
@@ -13,7 +12,6 @@ import {
 export const data = new SlashCommandBuilder()
   .setName('quarantine')
   .setDescription('Quarantine a member by removing their roles and assigning the quarantine role')
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addUserOption((option) =>
     option
       .setName('user')
@@ -51,7 +49,7 @@ export async function execute(interaction) {
   const hasStaffRole = member.roles.cache.has(settings.quarantineStaffRoleId);
   if (!hasStaffRole && !isAdmin(member)) {
     return interaction.editReply({
-      content: 'You do not have permission to use this command. You need the Quarantine Staff role or Administrator permission.',
+      content: '❌ You don\'t have permission to use this command.',
     });
   }
 
