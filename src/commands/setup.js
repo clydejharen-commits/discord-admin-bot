@@ -26,7 +26,7 @@ export async function execute(interaction) {
     .setDescription('Manage and configure your bot\'s features using the options below.')
     .setColor(0x2f3136);
 
-  const row = new ActionRowBuilder().addComponents(
+  const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('setup_appearance')
       .setLabel('Bot Appearance')
@@ -44,5 +44,13 @@ export async function execute(interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_invite_settings')
+      .setLabel('Invite Settings')
+      .setEmoji('🔗')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
 }
