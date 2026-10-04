@@ -10,17 +10,18 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
 import { getSettings, saveSettings, getQuarantineSettings, saveQuarantineSettings } from '../utils/tracker-db.js';
 import { isValidUrl } from '../utils/validate.js';
 
 // ---------------------------------------------------------------------------
-// Tracker Settings (unchanged)
+// Tracker Settings
 // ---------------------------------------------------------------------------
 
-async function getTrackerSettingsEmbed() {
-  const settings = await getSettings();
+async function getTrackerSettingsEmbed(guildId) {
+  const settings = await getSettings(guildId);
 
   const trackingChannel = settings?.trackingChannelId
     ? `<#${settings.trackingChannelId}>`
@@ -304,10 +305,33 @@ function getModSettingsComponents() {
 }
 
 // ---------------------------------------------------------------------------
+// Channel validation helper
+// ---------------------------------------------------------------------------
+
+async function validateTrackingChannel(guild, channelId) {
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel) {
+    return { valid: false, error: 'That channel no longer exists or is inaccessible.' };
+  }
+
+  const botPerms = channel.permissionsFor(guild.members.me);
+  if (!botPerms?.has(PermissionFlagsBits.SendMessages)) {
+    return { valid: false, error: 'The bot lacks **Send Messages** permission in that channel.' };
+  }
+  if (!botPerms?.has(PermissionFlagsBits.EmbedLinks)) {
+    return { valid: false, error: 'The bot lacks **Embed Links** permission in that channel.' };
+  }
+
+  return { valid: true };
+}
+
+// ---------------------------------------------------------------------------
 // Interaction handler
 // ---------------------------------------------------------------------------
 
 export async function handleSetupInteraction(interaction) {
+  const guildId = interaction.guild?.id;
+
   // ---- Buttons ----------------------------------------------------------
   if (interaction.isButton()) {
     // -- Back to main dashboard --
@@ -349,7 +373,7 @@ export async function handleSetupInteraction(interaction) {
         });
       }
       await interaction.deferUpdate();
-      const embed = await getTrackerSettingsEmbed();
+      const embed = await getTrackerSettingsEmbed(guildId);
       const components = getTrackerSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
       return;
@@ -548,7 +572,7 @@ export async function handleSetupInteraction(interaction) {
     // -- Tracker cancel buttons --
     if (interaction.customId === 'tracker_cancel_role' || interaction.customId === 'tracker_cancel_user') {
       await interaction.deferUpdate();
-      const embed = await getTrackerSettingsEmbed();
+      const embed = await getTrackerSettingsEmbed(guildId);
       const components = getTrackerSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
       return;
@@ -570,12 +594,10 @@ export async function handleSetupInteraction(interaction) {
 
       if (choice === 'clear_ping') {
         try {
-          const existing = await getSettings();
           await saveSettings({
-            trackingChannelId: existing?.trackingChannelId,
             completionPingType: null,
             completionPingId: null,
-          });
+          }, guildId);
         } catch (error) {
           console.error('Tracker Settings: failed to clear ping:', error.message);
           return interaction.editReply({
@@ -583,7 +605,7 @@ export async function handleSetupInteraction(interaction) {
             components: getTrackerSettingsComponents(),
           });
         }
-        const embed = await getTrackerSettingsEmbed();
+        const embed = await getTrackerSettingsEmbed(guildId);
         const components = getTrackerSettingsComponents();
         await interaction.editReply({ embeds: [embed], components });
         return;
@@ -603,7 +625,7 @@ export async function handleSetupInteraction(interaction) {
             .setLabel('Cancel')
             .setStyle(ButtonStyle.Secondary)
         );
-        const embed = await getTrackerSettingsEmbed();
+        const embed = await getTrackerSettingsEmbed(guildId);
         await interaction.editReply({ embeds: [embed], components: [roleSelectRow, cancelButtonRow] });
         return;
       }
@@ -622,7 +644,7 @@ export async function handleSetupInteraction(interaction) {
             .setLabel('Cancel')
             .setStyle(ButtonStyle.Secondary)
         );
-        const embed = await getTrackerSettingsEmbed();
+        const embed = await getTrackerSettingsEmbed(guildId);
         await interaction.editReply({ embeds: [embed], components: [userSelectRow, cancelButtonRow] });
         return;
       }
@@ -643,12 +665,10 @@ export async function handleSetupInteraction(interaction) {
       const roleId = interaction.values[0];
 
       try {
-        const existing = await getSettings();
         await saveSettings({
-          trackingChannelId: existing?.trackingChannelId,
           completionPingType: 'role',
           completionPingId: roleId,
-        });
+        }, guildId);
       } catch (error) {
         console.error('Tracker Settings: failed to save role ping:', error.message);
         return interaction.editReply({
@@ -657,7 +677,7 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
-      const embed = await getTrackerSettingsEmbed();
+      const embed = await getTrackerSettingsEmbed(guildId);
       const components = getTrackerSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
       return;
@@ -678,12 +698,10 @@ export async function handleSetupInteraction(interaction) {
       const userId = interaction.values[0];
 
       try {
-        const existing = await getSettings();
         await saveSettings({
-          trackingChannelId: existing?.trackingChannelId,
           completionPingType: 'user',
           completionPingId: userId,
-        });
+        }, guildId);
       } catch (error) {
         console.error('Tracker Settings: failed to save user ping:', error.message);
         return interaction.editReply({
@@ -692,7 +710,7 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
-      const embed = await getTrackerSettingsEmbed();
+      const embed = await getTrackerSettingsEmbed(guildId);
       const components = getTrackerSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
       return;
@@ -712,13 +730,20 @@ export async function handleSetupInteraction(interaction) {
       await interaction.deferUpdate();
       const channelId = interaction.values[0];
 
+      const validation = await validateTrackingChannel(interaction.guild, channelId);
+      if (!validation.valid) {
+        const embed = await getTrackerSettingsEmbed(guildId);
+        return interaction.editReply({
+          content: `⚠️ Could not set tracking channel: ${validation.error}`,
+          embeds: [embed],
+          components: getTrackerSettingsComponents(),
+        });
+      }
+
       try {
-        const existing = await getSettings();
         await saveSettings({
           trackingChannelId: channelId,
-          completionPingType: existing?.completionPingType,
-          completionPingId: existing?.completionPingId,
-        });
+        }, guildId);
       } catch (error) {
         console.error('Tracker Settings: failed to save channel:', error.message);
         return interaction.editReply({
@@ -727,9 +752,13 @@ export async function handleSetupInteraction(interaction) {
         });
       }
 
-      const embed = await getTrackerSettingsEmbed();
+      const embed = await getTrackerSettingsEmbed(guildId);
       const components = getTrackerSettingsComponents();
-      await interaction.editReply({ embeds: [embed], components });
+      await interaction.editReply({
+        content: '✅ Tracking channel updated. The active tracker will use this channel for future updates.',
+        embeds: [embed],
+        components,
+      });
       return;
     }
   }
