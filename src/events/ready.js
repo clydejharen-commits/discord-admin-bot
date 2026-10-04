@@ -1,6 +1,5 @@
 import { registerCommands } from '../utils/register-commands.js';
 import { restoreTracker } from '../services/tracker-service.js';
-import { syncGuildInvites } from '../services/invite-service.js';
 
 export const name = 'ready';
 export const once = true;
@@ -19,15 +18,5 @@ export async function execute(client) {
     await restoreTracker(client);
   } catch (error) {
     console.error('Failed to restore tracker on startup:', error);
-  }
-
-  // Cache invites for all guilds on startup
-  try {
-    for (const guild of client.guilds.cache.values()) {
-      await syncGuildInvites(guild);
-    }
-    console.log('Invite caches synced for all guilds.');
-  } catch (error) {
-    console.error('Failed to sync invite caches on startup:', error);
   }
 }
