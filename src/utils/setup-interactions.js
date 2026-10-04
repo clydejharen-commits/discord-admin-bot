@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
 import { getSettings, saveSettings, getQuarantineSettings, saveQuarantineSettings } from '../utils/tracker-db.js';
+import { getInviteSettings, saveInviteSettings } from '../utils/invite-db.js';
 import { isValidUrl } from '../utils/validate.js';
 
 // ---------------------------------------------------------------------------
@@ -235,6 +236,13 @@ function getSetupDashboardComponents() {
         .setEmoji('🛡️')
         .setStyle(ButtonStyle.Secondary)
     ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('setup_invite_settings')
+        .setLabel('Invite Settings')
+        .setEmoji('🔗')
+        .setStyle(ButtonStyle.Secondary)
+    ),
   ];
 }
 
@@ -304,6 +312,79 @@ function getModSettingsComponents() {
 }
 
 // ---------------------------------------------------------------------------
+// Invite Settings panel
+// ---------------------------------------------------------------------------
+
+const INVITE_SETTINGS_COLOR = 0x2f3136;
+
+async function getInviteSettingsEmbed(guildId) {
+  const settings = await getInviteSettings(guildId);
+
+  const staffRole = settings?.inviteStaffRoleId
+    ? `<@&${settings.inviteStaffRoleId}>`
+    : '❌ Not configured';
+  const verifiedRole = settings?.verifiedRoleId
+    ? `<@&${settings.verifiedRoleId}>`
+    : 'Not configured (optional)';
+  const logsChannel = settings?.inviteLogChannelId
+    ? `<#${settings.inviteLogChannelId}>`
+    : '❌ Not configured';
+
+  return new EmbedBuilder()
+    .setTitle('🔗 Invite Settings')
+    .setDescription('Configure the invite tracking system for this server.\nRejoin detection is always enabled.')
+    .addFields(
+      { name: 'Invite Staff Role', value: staffRole, inline: true },
+      { name: 'Verified Role', value: verifiedRole, inline: true },
+      { name: 'Invite Log Channel', value: logsChannel, inline: true }
+    )
+    .setColor(INVITE_SETTINGS_COLOR);
+}
+
+function getInviteSettingsComponents() {
+  const staffRoleRow = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId('invite_select_staff_role')
+      .setPlaceholder('Select Invite Staff role')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+
+  const verifiedRoleRow = new ActionRowBuilder().addComponents(
+    new RoleSelectMenuBuilder()
+      .setCustomId('invite_select_verified_role')
+      .setPlaceholder('Select Verified Role (optional)')
+      .setMinValues(0)
+      .setMaxValues(1)
+  );
+
+  const logChannelRow = new ActionRowBuilder().addComponents(
+    new ChannelSelectMenuBuilder()
+      .setCustomId('invite_select_log_channel')
+      .setPlaceholder('Select Invite Log channel')
+      .setMinValues(1)
+      .setMaxValues(1)
+  );
+
+  const clearVerifiedRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('invite_clear_verified_role')
+      .setLabel('Clear Verified Role')
+      .setEmoji('🗑️')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const backButtonRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('setup_back')
+      .setLabel('Back')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return [staffRoleRow, verifiedRoleRow, logChannelRow, clearVerifiedRow, backButtonRow];
+}
+
+// ---------------------------------------------------------------------------
 // Interaction handler
 // ---------------------------------------------------------------------------
 
@@ -337,6 +418,50 @@ export async function handleSetupInteraction(interaction) {
       const embed = await getModSettingsEmbed();
       const components = getModSettingsComponents();
       await interaction.editReply({ embeds: [embed], components });
+      return;
+    }
+
+    // -- Invite Settings --
+    if (interaction.customId === 'setup_invite_settings') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const embed = await getInviteSettingsEmbed(interaction.guild.id);
+      const components = getInviteSettingsComponents();
+      await interaction.editReply({ embeds: [embed], components });
+      return;
+    }
+
+    // -- Invite Settings: clear verified role --
+    if (interaction.customId === 'invite_clear_verified_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      try {
+        const existing = await getInviteSettings(interaction.guild.id);
+        await saveInviteSettings(interaction.guild.id, {
+          inviteStaffRoleId: existing?.inviteStaffRoleId,
+          verifiedRoleId: null,
+          inviteLogChannelId: existing?.inviteLogChannelId,
+        });
+      } catch (error) {
+        console.error('Invite Settings: failed to clear verified role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getInviteSettingsComponents(),
+        });
+      }
+      const embed = await getInviteSettingsEmbed(interaction.guild.id);
+      const components = getInviteSettingsComponents();
+      await interaction.editReply({ content: '✅ Verified Role cleared.', embeds: [embed], components });
       return;
     }
 
@@ -662,6 +787,125 @@ export async function handleSetupInteraction(interaction) {
       await interaction.editReply({ embeds: [embed], components });
       return;
     }
+
+    // -- Invite Settings: staff role --
+    if (interaction.customId === 'invite_select_staff_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0];
+      try {
+        const existing = await getInviteSettings(interaction.guild.id);
+        await saveInviteSettings(interaction.guild.id, {
+          inviteStaffRoleId: roleId,
+          verifiedRoleId: existing?.verifiedRoleId,
+          inviteLogChannelId: existing?.inviteLogChannelId,
+        });
+      } catch (error) {
+        console.error('Invite Settings: failed to save staff role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getInviteSettingsComponents(),
+        });
+      }
+      const embed = await getInviteSettingsEmbed(interaction.guild.id);
+      const components = getInviteSettingsComponents();
+      await interaction.editReply({ content: '✅ Invite Staff role updated.', embeds: [embed], components });
+      return;
+    }
+
+    // -- Invite Settings: verified role --
+    if (interaction.customId === 'invite_select_verified_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0] || null;
+      try {
+        const existing = await getInviteSettings(interaction.guild.id);
+        await saveInviteSettings(interaction.guild.id, {
+          inviteStaffRoleId: existing?.inviteStaffRoleId,
+          verifiedRoleId: roleId,
+          inviteLogChannelId: existing?.inviteLogChannelId,
+        });
+      } catch (error) {
+        console.error('Invite Settings: failed to save verified role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getInviteSettingsComponents(),
+        });
+      }
+      const embed = await getInviteSettingsEmbed(interaction.guild.id);
+      const components = getInviteSettingsComponents();
+      await interaction.editReply({ content: '✅ Verified Role updated.', embeds: [embed], components });
+      return;
+    }
+
+    // -- Mod Settings: staff role and quarantine role --
+    if (interaction.customId === 'mod_select_staff_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0];
+      try {
+        const existing = await getQuarantineSettings();
+        await saveQuarantineSettings({
+          quarantineStaffRoleId: roleId,
+          quarantineLogChannelId: existing?.quarantineLogChannelId,
+          quarantineRoleId: existing?.quarantineRoleId,
+        });
+      } catch (error) {
+        console.error('Mod Settings: failed to save staff role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getModSettingsComponents(),
+        });
+      }
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
+      await interaction.editReply({ content: '✅ Quarantine Staff role updated.', embeds: [embed], components });
+      return;
+    }
+
+    if (interaction.customId === 'mod_select_quarantine_role') {
+      if (!isAdmin(interaction.member)) {
+        return interaction.reply({
+          content: 'You do not have permission to interact with this setup.',
+          ephemeral: true,
+        });
+      }
+      await interaction.deferUpdate();
+      const roleId = interaction.values[0];
+      try {
+        const existing = await getQuarantineSettings();
+        await saveQuarantineSettings({
+          quarantineStaffRoleId: existing?.quarantineStaffRoleId,
+          quarantineLogChannelId: existing?.quarantineLogChannelId,
+          quarantineRoleId: roleId,
+        });
+      } catch (error) {
+        console.error('Mod Settings: failed to save quarantine role:', error.message);
+        return interaction.editReply({
+          content: 'An error occurred while saving the configuration. Please try again.',
+          components: getModSettingsComponents(),
+        });
+      }
+      const embed = await getModSettingsEmbed();
+      const components = getModSettingsComponents();
+      await interaction.editReply({ content: '✅ Quarantine Role updated.', embeds: [embed], components });
+      return;
+    }
   }
 
   // ---- User select menus -----------------------------------------------
@@ -732,12 +976,9 @@ export async function handleSetupInteraction(interaction) {
       await interaction.editReply({ embeds: [embed], components });
       return;
     }
-  }
 
-  // ---- Mod Settings: role/channel select menus --------------------------
-  if (interaction.isRoleSelectMenu() || interaction.isChannelSelectMenu()) {
-    // Quarantine Staff role
-    if (interaction.customId === 'mod_select_staff_role') {
+    // -- Invite Settings: log channel --
+    if (interaction.customId === 'invite_select_log_channel') {
       if (!isAdmin(interaction.member)) {
         return interaction.reply({
           content: 'You do not have permission to interact with this setup.',
@@ -745,58 +986,28 @@ export async function handleSetupInteraction(interaction) {
         });
       }
       await interaction.deferUpdate();
-      const roleId = interaction.values[0];
+      const channelId = interaction.values[0];
       try {
-        const existing = await getQuarantineSettings();
-        await saveQuarantineSettings({
-          quarantineStaffRoleId: roleId,
-          quarantineLogChannelId: existing?.quarantineLogChannelId,
-          quarantineRoleId: existing?.quarantineRoleId,
+        const existing = await getInviteSettings(interaction.guild.id);
+        await saveInviteSettings(interaction.guild.id, {
+          inviteStaffRoleId: existing?.inviteStaffRoleId,
+          verifiedRoleId: existing?.verifiedRoleId,
+          inviteLogChannelId: channelId,
         });
       } catch (error) {
-        console.error('Mod Settings: failed to save staff role:', error.message);
+        console.error('Invite Settings: failed to save log channel:', error.message);
         return interaction.editReply({
           content: 'An error occurred while saving the configuration. Please try again.',
-          components: getModSettingsComponents(),
+          components: getInviteSettingsComponents(),
         });
       }
-      const embed = await getModSettingsEmbed();
-      const components = getModSettingsComponents();
-      await interaction.editReply({ content: '✅ Quarantine Staff role updated.', embeds: [embed], components });
+      const embed = await getInviteSettingsEmbed(interaction.guild.id);
+      const components = getInviteSettingsComponents();
+      await interaction.editReply({ content: '✅ Invite Log channel updated.', embeds: [embed], components });
       return;
     }
 
-    // Quarantine Role
-    if (interaction.customId === 'mod_select_quarantine_role') {
-      if (!isAdmin(interaction.member)) {
-        return interaction.reply({
-          content: 'You do not have permission to interact with this setup.',
-          ephemeral: true,
-        });
-      }
-      await interaction.deferUpdate();
-      const roleId = interaction.values[0];
-      try {
-        const existing = await getQuarantineSettings();
-        await saveQuarantineSettings({
-          quarantineStaffRoleId: existing?.quarantineStaffRoleId,
-          quarantineLogChannelId: existing?.quarantineLogChannelId,
-          quarantineRoleId: roleId,
-        });
-      } catch (error) {
-        console.error('Mod Settings: failed to save quarantine role:', error.message);
-        return interaction.editReply({
-          content: 'An error occurred while saving the configuration. Please try again.',
-          components: getModSettingsComponents(),
-        });
-      }
-      const embed = await getModSettingsEmbed();
-      const components = getModSettingsComponents();
-      await interaction.editReply({ content: '✅ Quarantine Role updated.', embeds: [embed], components });
-      return;
-    }
-
-    // Quarantine Log channel
+    // -- Mod Settings: log channel --
     if (interaction.customId === 'mod_select_log_channel') {
       if (!isAdmin(interaction.member)) {
         return interaction.reply({
