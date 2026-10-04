@@ -38,9 +38,11 @@ The bot must have the **Manage Nicknames** permission in the server to modify it
 
 The bot tracks a Roblox user's follower count and posts updates in a configured Discord channel:
 
-- Only one tracker can be active at a time.
+- Only one tracker can be active per guild at a time.
 - The tracker survives bot restarts (stored in MongoDB).
+- Roblox API rate limits (429) are handled with exponential backoff — the tracker stays active while waiting to retry.
 - When the follower milestone is reached, a completion embed is posted and the configured role/user is pinged.
+- Changing the tracking channel via `/setup` takes effect immediately for the active tracker.
 - Use `q. Track stop` to stop tracking.
 
 ## Setup

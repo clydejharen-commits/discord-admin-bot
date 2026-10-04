@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
 import { getActiveTracker, saveActiveTracker, getSettings } from '../utils/tracker-db.js';
-import { resolveUserId, getFollowerCount } from '../utils/roblox.js';
+import { resolveUserId, getFollowerCount, RobloxRateLimitError } from '../utils/roblox.js';
 import { startTrackerLoop } from '../services/tracker-service.js';
 
 export const data = new SlashCommandBuilder()
@@ -32,10 +32,11 @@ export async function execute(interaction) {
 
   const username = interaction.options.getString('roblox_username');
   const milestone = interaction.options.getInteger('milestone');
+  const guildId = interaction.guild.id;
 
   await interaction.deferReply({ ephemeral: true });
 
-  const existing = await getActiveTracker();
+  const existing = await getActiveTracker(guildId);
   if (existing) {
     return interaction.editReply({
       content: `A tracker is already active for **${existing.robloxName}** (target: ${existing.milestone.toLocaleString()}). Stop it first with \`q. Track stop\`.`,
@@ -62,6 +63,11 @@ export async function execute(interaction) {
   try {
     currentFollowers = await getFollowerCount(resolved.id);
   } catch (error) {
+    if (error instanceof RobloxRateLimitError) {
+      return interaction.editReply({
+        content: 'The Roblox API is currently rate-limited. The tracker could not be started right now. Please wait a few minutes and try again.',
+      });
+    }
     console.error('Track command: failed to get follower count:', error.message);
     return interaction.editReply({
       content: 'Failed to fetch the current follower count from Roblox. Please try again.',
@@ -72,6 +78,7 @@ export async function execute(interaction) {
     robloxName: resolved.name,
     robloxId: resolved.id,
     milestone,
+    guildId,
     startedAt: Date.now(),
   });
 
@@ -86,12 +93,16 @@ export async function execute(interaction) {
     )
     .setColor(0x00bfff);
 
-  const settings = await getSettings();
+  const settings = await getSettings(guildId);
   const channelId = settings?.trackingChannelId;
   if (channelId) {
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
     if (channel) {
-      await channel.send({ embeds: [embed] });
+      await channel.send({ embeds: [embed] }).catch((err) => {
+        console.error('Track command: failed to send tracking embed:', err.message);
+      });
+    } else {
+      console.warn('Track command: configured tracking channel is invalid.');
     }
   }
 

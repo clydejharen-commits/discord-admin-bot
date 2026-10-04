@@ -2,7 +2,6 @@ import { PermissionFlagsBits } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
 import { getActiveTracker, clearActiveTracker } from '../utils/tracker-db.js';
 
-const PREFIX = 'q.';
 const STOP_COMMAND = 'q. track stop';
 
 export const name = 'messageCreate';
@@ -19,14 +18,14 @@ export async function execute(message) {
     });
   }
 
-  const tracker = await getActiveTracker();
+  const tracker = await getActiveTracker(message.guild.id);
   if (!tracker) {
     return message.reply({
       content: 'There is no active tracker to stop.',
     });
   }
 
-  await clearActiveTracker();
+  await clearActiveTracker(message.guild.id);
 
   return message.reply({
     content: `Stopped tracking **${tracker.robloxName}** (target was ${tracker.milestone.toLocaleString()}).`,

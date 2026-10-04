@@ -2,35 +2,49 @@ import { getDb } from './database.js';
 
 const TRACKER_DOC_ID = 'active_tracker';
 
-export async function getActiveTracker() {
+export async function getActiveTracker(guildId) {
   const db = getDb();
-  return db.collection('trackers').findOne({ _id: TRACKER_DOC_ID });
+  const filter = guildId ? { guildId, active: true } : { _id: TRACKER_DOC_ID };
+  return db.collection('trackers').findOne(filter);
 }
 
 export async function saveActiveTracker(tracker) {
   const db = getDb();
+  const docId = tracker.guildId
+    ? `${TRACKER_DOC_ID}_${tracker.guildId}`
+    : TRACKER_DOC_ID;
   await db.collection('trackers').updateOne(
-    { _id: TRACKER_DOC_ID },
-    { $set: { _id: TRACKER_DOC_ID, ...tracker } },
+    { _id: docId },
+    { $set: { _id: docId, ...tracker, active: true } },
     { upsert: true }
   );
 }
 
-export async function clearActiveTracker() {
+export async function clearActiveTracker(guildId) {
   const db = getDb();
-  await db.collection('trackers').deleteOne({ _id: TRACKER_DOC_ID });
+  if (guildId) {
+    await db.collection('trackers').updateOne(
+      { guildId, active: true },
+      { $set: { active: false, stoppedAt: Date.now() } }
+    );
+  } else {
+    await db.collection('trackers').deleteOne({ _id: TRACKER_DOC_ID });
+  }
 }
 
-export async function getSettings() {
+export async function getSettings(guildId) {
   const db = getDb();
-  return db.collection('settings').findOne({ _id: 'bot_settings' });
+  const docId = guildId ? `bot_settings_${guildId}` : 'bot_settings';
+  return db.collection('settings').findOne({ _id: docId });
 }
 
-export async function saveSettings(settings) {
+export async function saveSettings(settings, guildId) {
   const db = getDb();
+  const docId = guildId ? `bot_settings_${guildId}` : 'bot_settings';
+  const existing = await getSettings(guildId);
   await db.collection('settings').updateOne(
-    { _id: 'bot_settings' },
-    { $set: { _id: 'bot_settings', ...settings } },
+    { _id: docId },
+    { $set: { _id: docId, ...existing, ...settings } },
     { upsert: true }
   );
 }
