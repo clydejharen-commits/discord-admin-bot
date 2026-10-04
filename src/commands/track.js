@@ -1,8 +1,15 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
-import { getActiveTracker, saveActiveTracker, getSettings } from '../utils/tracker-db.js';
+import {
+  getActiveTracker,
+  saveActiveTracker,
+  getSettings,
+  addFollowerHistory,
+  getFollowerHistory,
+  updateTrackerMessageId,
+} from '../utils/tracker-db.js';
 import { resolveUserId, getFollowerCount, RobloxRateLimitError } from '../utils/roblox.js';
-import { startTrackerLoop } from '../services/tracker-service.js';
+import { startTrackerLoop, startGuildTracker } from '../services/tracker-service.js';
 
 export const data = new SlashCommandBuilder()
   .setName('track')
@@ -82,14 +89,18 @@ export async function execute(interaction) {
     startedAt: Date.now(),
   });
 
+  await addFollowerHistory(guildId, currentFollowers);
+
+  const history = await getFollowerHistory(guildId);
   const embed = new EmbedBuilder()
     .setTitle('Followers Tracker')
     .addFields(
       { name: 'Roblox User', value: resolved.name, inline: true },
-      { name: 'Current Followers', value: currentFollowers.toLocaleString(), inline: true },
-      { name: 'Target', value: milestone.toLocaleString(), inline: true },
-      { name: 'Progress', value: `${currentFollowers.toLocaleString()} / ${milestone.toLocaleString()}`, inline: true },
-      { name: 'Status', value: '🟢 Tracking', inline: true }
+      { name: 'Followers', value: `👥 ${currentFollowers.toLocaleString()} / ${milestone.toLocaleString()}`, inline: true },
+      { name: 'Status', value: '🟢 Tracking', inline: true },
+      { name: '📈 +/min', value: 'Calculating...', inline: true },
+      { name: '📊 +/hour', value: 'Calculating...', inline: true },
+      { name: '📅 +/day', value: 'Calculating...', inline: true }
     )
     .setColor(0x00bfff);
 
@@ -98,15 +109,19 @@ export async function execute(interaction) {
   if (channelId) {
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
     if (channel) {
-      await channel.send({ embeds: [embed] }).catch((err) => {
+      const sent = await channel.send({ embeds: [embed] }).catch((err) => {
         console.error('Track command: failed to send tracking embed:', err.message);
       });
+      if (sent) {
+        await updateTrackerMessageId(guildId, sent.id);
+      }
     } else {
       console.warn('Track command: configured tracking channel is invalid.');
     }
   }
 
   startTrackerLoop(interaction.client);
+  startGuildTracker(guildId);
 
   return interaction.editReply({
     content: `Started tracking **${resolved.name}**'s followers. Target: ${milestone.toLocaleString()}. Current: ${currentFollowers.toLocaleString()}.`,

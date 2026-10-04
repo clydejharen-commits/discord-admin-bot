@@ -1,6 +1,6 @@
-import { PermissionFlagsBits } from 'discord.js';
 import { isAdmin } from '../utils/permissions.js';
-import { getActiveTracker, clearActiveTracker } from '../utils/tracker-db.js';
+import { getActiveTracker } from '../utils/tracker-db.js';
+import { stopTracker } from '../services/tracker-service.js';
 
 const STOP_COMMAND = 'q. track stop';
 
@@ -25,7 +25,7 @@ export async function execute(message) {
     });
   }
 
-  await clearActiveTracker(message.guild.id);
+  await stopTracker(message.guild.id);
 
   return message.reply({
     content: `Stopped tracking **${tracker.robloxName}** (target was ${tracker.milestone.toLocaleString()}).`,

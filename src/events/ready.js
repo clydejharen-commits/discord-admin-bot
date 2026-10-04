@@ -1,5 +1,5 @@
 import { registerCommands } from '../utils/register-commands.js';
-import { restoreTracker } from '../services/tracker-service.js';
+import { restoreTrackers } from '../services/tracker-service.js';
 
 export const name = 'ready';
 export const once = true;
@@ -15,8 +15,8 @@ export async function execute(client) {
   }
 
   try {
-    await restoreTracker(client);
+    await restoreTrackers(client);
   } catch (error) {
-    console.error('Failed to restore tracker on startup:', error);
+    console.error('Failed to restore trackers on startup:', error);
   }
 }
