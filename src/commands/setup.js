@@ -41,6 +41,11 @@ export async function execute(interaction) {
       .setCustomId('setup_mod_settings')
       .setLabel('Mod Settings')
       .setEmoji('🛡️')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('setup_ticket_settings')
+      .setLabel('Ticket Settings')
+      .setEmoji('🎫')
       .setStyle(ButtonStyle.Secondary)
   );
 
