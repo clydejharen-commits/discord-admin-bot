@@ -4,6 +4,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ChannelSelectMenuBuilder,
+  ChannelType,
   RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
   ModalBuilder,
@@ -72,6 +73,7 @@ function getTicketSettingsComponents() {
     new ChannelSelectMenuBuilder()
       .setCustomId('ticket_select_category')
       .setPlaceholder('Select Ticket Category')
+      .setChannelTypes([ChannelType.GuildCategory])
       .setMinValues(1)
       .setMaxValues(1)
   );

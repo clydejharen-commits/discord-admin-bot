@@ -281,7 +281,7 @@ export async function sendTicketGreeting(channel, creator, ticketType, extraData
 
   const sent = await channel.send({ content: `<@${creator.id}>`, embeds: [embed], components: [controlsRow] });
 
-  await updateTicket(guild.id, channel.id, { greetingMessageId: sent.id, updatedAt: Date.now() });
+  await updateTicket(channel.guild.id, channel.id, { greetingMessageId: sent.id, updatedAt: Date.now() });
 
   return sent;
 }

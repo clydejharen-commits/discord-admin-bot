@@ -86,11 +86,11 @@ export async function createTicketRecord(record) {
   await db.collection('tickets').insertOne(record);
 }
 
-export async function getTicket(guildId, userId, ticketType) {
+export async function getTicket(guildId, creatorId, ticketType) {
   const db = getDb();
   return db.collection('tickets').findOne({
     guildId,
-    userId,
+    creatorId,
     ticketType,
   });
 }
