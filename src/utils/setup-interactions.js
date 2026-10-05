@@ -889,7 +889,7 @@ export async function handleAppearanceModalSubmit(interaction) {
 
   if (customId === 'appearance_modal_avatar') {
     await interaction.deferReply({ ephemeral: true });
-    const imageUrl = interaction.fields.getTextTextInputValue('image_url').trim();
+    const imageUrl = interaction.fields.getTextInputValue('image_url').trim();
 
     const dataUri = await fetchImageAsDataUriWithFallback(imageUrl);
     if (!dataUri) {
@@ -914,7 +914,7 @@ export async function handleAppearanceModalSubmit(interaction) {
 
   if (customId === 'appearance_modal_banner') {
     await interaction.deferReply({ ephemeral: true });
-    const imageUrl = interaction.fields.getTextTextInputValue('image_url').trim();
+    const imageUrl = interaction.fields.getTextInputValue('image_url').trim();
 
     const dataUri = await fetchImageAsDataUriWithFallback(imageUrl);
     if (!dataUri) {
@@ -939,7 +939,7 @@ export async function handleAppearanceModalSubmit(interaction) {
 
   if (customId === 'appearance_modal_bio') {
     await interaction.deferReply({ ephemeral: true });
-    const bioText = interaction.fields.getTextTextInputValue('bio_text').trim();
+    const bioText = interaction.fields.getTextInputValue('bio_text').trim();
 
     try {
       await interaction.guild.members.editMe({ bio: bioText });
