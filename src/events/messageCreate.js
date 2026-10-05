@@ -88,7 +88,7 @@ export async function execute(message) {
       const isStaff = staffRoleId && message.member.roles.cache.has(staffRoleId);
       const isStaffAdmin = isAdmin(message.member);
 
-      if ((isStaff || isStaffAdmin) && message.content.trim().toLowerCase() === 'done') {
+      if ((isStaff || isStaffAdmin) && message.content.replace(/\s+/g, '').toLowerCase() === 'done') {
         // Only send the request if it hasn't been sent yet
         if (!ticket.robloxProfileRequested) {
           await updateTicket(message.guild.id, message.channel.id, {

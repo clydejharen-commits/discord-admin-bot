@@ -4,7 +4,7 @@ import {
   handleTicketModalSubmit,
   handleTicketClaimButton,
   handleCloseDeleteButton,
-  handleCloseReasonSelect,
+  handleCloseModalSubmit,
   handleTicketReopenButton,
   handleTicketDeleteConfirm,
   handleDeleteButtonSelect,
@@ -69,7 +69,11 @@ export async function execute(interaction) {
     // Ticket modals
     if (interaction.customId.startsWith('ticket_modal_')) {
       try {
-        await handleTicketModalSubmit(interaction);
+        if (interaction.customId === 'ticket_modal_close') {
+          await handleCloseModalSubmit(interaction);
+        } else {
+          await handleTicketModalSubmit(interaction);
+        }
       } catch (error) {
         console.error('Error handling ticket modal submit:', error);
 
@@ -120,27 +124,6 @@ export async function execute(interaction) {
 
       const payload = {
         content: 'An error occurred while deleting this ticket option.',
-        ephemeral: true,
-      };
-
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp(payload).catch(() => {});
-      } else {
-        await interaction.reply(payload).catch(() => {});
-      }
-    }
-    return;
-  }
-
-  // Close reason select menu
-  if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_close_reason_select') {
-    try {
-      await handleCloseReasonSelect(interaction);
-    } catch (error) {
-      console.error('Error handling close reason select:', error);
-
-      const payload = {
-        content: 'An error occurred while closing this ticket.',
         ephemeral: true,
       };
 
