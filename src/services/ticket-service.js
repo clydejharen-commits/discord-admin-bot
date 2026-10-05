@@ -227,12 +227,8 @@ export async function updateTicketPanelMessage(guild, messageId) {
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Support Tickets')
-    .setDescription('Select a ticket type from the dropdown below to open a ticket.')
-    .setColor(0x2f3136);
-
-  await message.edit({ embeds: [embed], components: [components] }).catch(() => {});
+  // Only update the components (dropdown) — preserve the existing embed as-is
+  await message.edit({ components: [components] }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
