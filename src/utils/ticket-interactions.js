@@ -20,6 +20,7 @@ import {
   getTicketByChannel,
   updateTicket,
   deleteTicketRecord,
+  getCloseReasons,
 } from '../utils/ticket-db.js';
 import {
   TICKET_TYPES,
@@ -30,6 +31,10 @@ import {
   sendTicketGreeting,
   buildTicketPanelComponents,
   updateTicketPanelMessage,
+  buildOpenTicketControls,
+  buildClosedTicketControls,
+  lockTicketForCreator,
+  unlockTicketForCreator,
 } from '../services/ticket-service.js';
 
 // ---------------------------------------------------------------------------
@@ -570,11 +575,21 @@ export async function handleTicketPanelSelect(interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// Handle ticket close button
+// Permission helper: is the member Ticket Staff or Admin?
 // ---------------------------------------------------------------------------
 
-export async function handleTicketCloseButton(interaction) {
-  if (interaction.customId !== 'ticket_close') return;
+async function isTicketStaff(interaction, staffRoleId) {
+  if (isAdmin(interaction.member)) return true;
+  if (staffRoleId && interaction.member.roles.cache.has(staffRoleId)) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// 🛄 Claim button — Ticket Staff / Admins only
+// ---------------------------------------------------------------------------
+
+export async function handleTicketClaimButton(interaction) {
+  if (interaction.customId !== 'ticket_claim') return;
 
   const guildId = interaction.guild?.id;
   const channelId = interaction.channel.id;
@@ -589,51 +604,60 @@ export async function handleTicketCloseButton(interaction) {
 
   const settings = await getTicketSettings(guildId);
   const staffRoleId = settings?.ticketStaffRoleId;
-  const isStaff = staffRoleId && interaction.member.roles.cache.has(staffRoleId);
-  const isCreator = ticket.creatorId === interaction.user.id;
-  const isAdminUser = isAdmin(interaction.member);
 
-  if (!isStaff && !isCreator && !isAdminUser) {
+  const staffMember = await isTicketStaff(interaction, staffRoleId);
+  if (!staffMember) {
     return interaction.reply({
-      content: 'You do not have permission to close this ticket.',
+      content: 'Only Ticket Staff or Administrators can claim tickets.',
+      ephemeral: true,
+    });
+  }
+
+  // Already claimed — prevent duplicate claims
+  if (ticket.claimStaffId) {
+    return interaction.reply({
+      content: `This ticket has already been claimed by <@${ticket.claimStaffId}>.`,
       ephemeral: true,
     });
   }
 
   await interaction.deferUpdate();
 
-  await updateTicket(guildId, channelId, { status: 'closed', closedAt: Date.now() });
+  await updateTicket(guildId, channelId, {
+    claimStaffId: interaction.user.id,
+    updatedAt: Date.now(),
+  });
 
-  const embed = new EmbedBuilder()
-    .setTitle('🔒 Ticket Closed')
-    .setDescription(
-      `This ticket has been closed by <@${interaction.user.id}>.\n` +
-      'Staff can reopen it, or it can be permanently deleted.'
-    )
+  // Update the greeting message controls to show claimed state
+  const claimEmbed = new EmbedBuilder()
+    .setTitle('🛄 Ticket Claimed')
+    .setDescription(`This ticket has been claimed by <@${interaction.user.id}>.`)
     .setColor(0x2f3136);
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('ticket_reopen')
-      .setLabel('Reopen')
-      .setEmoji('🔓')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('ticket_delete')
-      .setLabel('Delete Permanently')
-      .setEmoji('🗑️')
-      .setStyle(ButtonStyle.Danger)
-  );
+  await interaction.channel.send({ embeds: [claimEmbed] }).catch(() => {});
 
-  await interaction.editReply({ embeds: [embed], components: [row] });
+  // Update the original greeting controls (disable the claim button)
+  if (ticket.greetingMessageId) {
+    const greetingMsg = await interaction.channel.messages
+      .fetch(ticket.greetingMessageId)
+      .catch(() => null);
+    if (greetingMsg) {
+      await greetingMsg
+        .edit({ components: [buildOpenTicketControls(interaction.user.id)] })
+        .catch(() => {});
+    }
+  }
+
+  await interaction.editReply({ components: [buildOpenTicketControls(interaction.user.id)] });
 }
 
 // ---------------------------------------------------------------------------
-// Handle ticket reopen and delete buttons
+// 🔒 Close & Delete button — shows close-reason dropdown (if configured) or
+// a confirmation step for permanent deletion.
 // ---------------------------------------------------------------------------
 
-export async function handleTicketStateButton(interaction) {
-  if (interaction.customId !== 'ticket_reopen' && interaction.customId !== 'ticket_delete') return;
+export async function handleCloseDeleteButton(interaction) {
+  if (interaction.customId !== 'ticket_close_delete') return;
 
   const guildId = interaction.guild?.id;
   const channelId = interaction.channel.id;
@@ -648,50 +672,288 @@ export async function handleTicketStateButton(interaction) {
 
   const settings = await getTicketSettings(guildId);
   const staffRoleId = settings?.ticketStaffRoleId;
-  const isStaff = staffRoleId && interaction.member.roles.cache.has(staffRoleId);
-  const isAdminUser = isAdmin(interaction.member);
+  const isCreator = ticket.creatorId === interaction.user.id;
+  const staffMember = await isTicketStaff(interaction, staffRoleId);
 
-  if (!isStaff && !isAdminUser) {
+  if (!staffMember && !isCreator) {
     return interaction.reply({
-      content: 'Only Ticket Staff or Administrators can do this.',
+      content: 'You do not have permission to close this ticket.',
       ephemeral: true,
     });
   }
 
-  // Reopen
-  if (interaction.customId === 'ticket_reopen') {
-    await interaction.deferUpdate();
-    await updateTicket(guildId, channelId, { status: 'open', closedAt: null, reopenedAt: Date.now() });
-
-    const embed = new EmbedBuilder()
-      .setTitle('🔓 Ticket Reopened')
-      .setDescription(`This ticket has been reopened by <@${interaction.user.id}>.`)
-      .setColor(0x2f3136);
+  // If the ticket is already closed, show the permanent-delete confirmation
+  if (ticket.status === 'closed') {
+    const confirmEmbed = new EmbedBuilder()
+      .setTitle('⚠️ Permanently Delete Ticket?')
+      .setDescription(
+        'This will **permanently delete** this ticket channel and its records.\n' +
+        'This action cannot be undone.'
+      )
+      .setColor(0xed4245);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId('ticket_close')
-        .setLabel('Close Ticket')
-        .setEmoji('🔒')
-        .setStyle(ButtonStyle.Danger)
+        .setCustomId('ticket_delete_confirm')
+        .setLabel('Delete Permanently')
+        .setEmoji('🗑️')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('ticket_delete_cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    return interaction.reply({ embeds: [confirmEmbed], components: [row], ephemeral: true });
+  }
+
+  // Ticket is open — show close-reason dropdown
+  const closeReasons = await getCloseReasons(guildId);
+
+  if (closeReasons.length === 0) {
+    // No reasons configured — close without a reason
+    await interaction.deferUpdate();
+
+    await closeTicket(interaction, ticket, settings, null);
+
+    const embed = new EmbedBuilder()
+      .setTitle('Ticket Closed')
+      .setDescription('Reason: No reason provided (no close reasons configured)')
+      .setColor(0x2f3136);
+
+    await interaction.followUp({ embeds: [embed], ephemeral: true }).catch(() => {});
     return;
   }
 
-  // Delete permanently
-  if (interaction.customId === 'ticket_delete') {
-    await interaction.deferUpdate();
+  const options = closeReasons.map((r) => ({
+    label: r.label.slice(0, 100),
+    value: r.id,
+    description: 'Select this close reason',
+    emoji: r.emoji || undefined,
+  }));
 
-    await deleteTicketRecord(guildId, channelId);
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('ticket_close_reason_select')
+      .setPlaceholder('Select a close reason...')
+      .addOptions(options)
+  );
 
-    try {
-      await interaction.channel.delete('Ticket permanently deleted.');
-    } catch (error) {
-      console.error('Ticket: failed to delete channel:', error.message);
+  const embed = new EmbedBuilder()
+    .setTitle('🔒 Close Ticket')
+    .setDescription('Select a reason for closing this ticket.')
+    .setColor(0x2f3136);
+
+  return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
+
+// ---------------------------------------------------------------------------
+// Close reason select menu — closes the ticket with the chosen reason
+// ---------------------------------------------------------------------------
+
+export async function handleCloseReasonSelect(interaction) {
+  if (interaction.customId !== 'ticket_close_reason_select') return;
+
+  const guildId = interaction.guild?.id;
+  const channelId = interaction.channel.id;
+
+  const ticket = await getTicketByChannel(guildId, channelId);
+  if (!ticket) {
+    return interaction.reply({
+      content: '❌ This channel is not a ticket channel.',
+      ephemeral: true,
+    });
+  }
+
+  const settings = await getTicketSettings(guildId);
+  const staffRoleId = settings?.ticketStaffRoleId;
+  const isCreator = ticket.creatorId === interaction.user.id;
+  const staffMember = await isTicketStaff(interaction, staffRoleId);
+
+  if (!staffMember && !isCreator) {
+    return interaction.reply({
+      content: 'You do not have permission to close this ticket.',
+      ephemeral: true,
+    });
+  }
+
+  const reasonId = interaction.values[0];
+  const closeReasons = await getCloseReasons(guildId);
+  const reason = closeReasons.find((r) => r.id === reasonId);
+  const reasonLabel = reason ? reason.label : 'Unknown';
+
+  await interaction.deferUpdate();
+
+  await closeTicket(interaction, ticket, settings, reasonLabel);
+
+  const embed = new EmbedBuilder()
+    .setTitle('Ticket Closed')
+    .setDescription(`Reason: ${reasonLabel}`)
+    .setColor(0x2f3136);
+
+  await interaction.editReply({ embeds: [embed], components: [] });
+}
+
+// ---------------------------------------------------------------------------
+// Shared close logic: update DB, lock creator, post closed controls
+// ---------------------------------------------------------------------------
+
+async function closeTicket(interaction, ticket, settings, reasonLabel) {
+  const guildId = interaction.guild.id;
+  const channelId = interaction.channel.id;
+  const staffRoleId = settings?.ticketStaffRoleId;
+  const now = Date.now();
+
+  await updateTicket(guildId, channelId, {
+    status: 'closed',
+    closeReason: reasonLabel,
+    closedAt: now,
+    updatedAt: now,
+  });
+
+  // Lock the creator out of sending messages (keep view access)
+  await lockTicketForCreator(interaction.guild, interaction.channel, ticket.creatorId, staffRoleId);
+
+  // Post a closed embed in the ticket channel with Reopen + Close&Delete
+  const closedEmbed = new EmbedBuilder()
+    .setTitle('🔒 Ticket Closed')
+    .setDescription(
+      `This ticket has been closed by <@${interaction.user.id}>.\n` +
+      (reasonLabel ? `**Reason:** ${reasonLabel}\n` : '') +
+      'Staff can reopen it, or use Close & Delete to permanently delete it.'
+    )
+    .setColor(0x2f3136);
+
+  await interaction.channel
+    .send({ content: `<@${ticket.creatorId}>`, embeds: [closedEmbed], components: [buildClosedTicketControls()] })
+    .catch(() => {});
+
+  // Update the original greeting message controls
+  if (ticket.greetingMessageId) {
+    const greetingMsg = await interaction.channel.messages
+      .fetch(ticket.greetingMessageId)
+      .catch(() => null);
+    if (greetingMsg) {
+      await greetingMsg.edit({ components: [buildClosedTicketControls()] }).catch(() => {});
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 🔓 Reopen button — Ticket Staff / Admins only, on closed tickets
+// ---------------------------------------------------------------------------
+
+export async function handleTicketReopenButton(interaction) {
+  if (interaction.customId !== 'ticket_reopen') return;
+
+  const guildId = interaction.guild?.id;
+  const channelId = interaction.channel.id;
+
+  const ticket = await getTicketByChannel(guildId, channelId);
+  if (!ticket) {
+    return interaction.reply({
+      content: '❌ This channel is not a ticket channel.',
+      ephemeral: true,
+    });
+  }
+
+  const settings = await getTicketSettings(guildId);
+  const staffRoleId = settings?.ticketStaffRoleId;
+  const staffMember = await isTicketStaff(interaction, staffRoleId);
+
+  if (!staffMember) {
+    return interaction.reply({
+      content: 'Only Ticket Staff or Administrators can reopen tickets.',
+      ephemeral: true,
+    });
+  }
+
+  await interaction.deferUpdate();
+
+  // Restore full chat permissions for the creator
+  await unlockTicketForCreator(interaction.guild, interaction.channel, ticket.creatorId, staffRoleId);
+
+  await updateTicket(guildId, channelId, {
+    status: 'open',
+    closedAt: null,
+    reopenedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
+  const reopenEmbed = new EmbedBuilder()
+    .setTitle('🔓 Ticket Reopened')
+    .setDescription(
+      `This ticket has been reopened by <@${interaction.user.id}>.\n` +
+      `<@${ticket.creatorId}>, you can send messages again.`
+    )
+    .setColor(0x2f3136);
+
+  await interaction.channel
+    .send({ content: `<@${ticket.creatorId}>`, embeds: [reopenEmbed], components: [buildOpenTicketControls(ticket.claimStaffId)] })
+    .catch(() => {});
+
+  // Update the original greeting message controls
+  if (ticket.greetingMessageId) {
+    const greetingMsg = await interaction.channel.messages
+      .fetch(ticket.greetingMessageId)
+      .catch(() => null);
+    if (greetingMsg) {
+      await greetingMsg.edit({ components: [buildOpenTicketControls(ticket.claimStaffId)] }).catch(() => {});
+    }
+  }
+
+  await interaction.editReply({ components: [buildOpenTicketControls(ticket.claimStaffId)] });
+}
+
+// ---------------------------------------------------------------------------
+// Delete confirmation buttons (confirm / cancel)
+// ---------------------------------------------------------------------------
+
+export async function handleTicketDeleteConfirm(interaction) {
+  if (
+    interaction.customId !== 'ticket_delete_confirm' &&
+    interaction.customId !== 'ticket_delete_cancel'
+  ) {
     return;
+  }
+
+  const guildId = interaction.guild?.id;
+  const channelId = interaction.channel.id;
+
+  const ticket = await getTicketByChannel(guildId, channelId);
+  if (!ticket) {
+    return interaction.reply({
+      content: '❌ This channel is not a ticket channel.',
+      ephemeral: true,
+    });
+  }
+
+  const settings = await getTicketSettings(guildId);
+  const staffRoleId = settings?.ticketStaffRoleId;
+  const staffMember = await isTicketStaff(interaction, staffRoleId);
+
+  if (!staffMember) {
+    return interaction.reply({
+      content: 'Only Ticket Staff or Administrators can permanently delete tickets.',
+      ephemeral: true,
+    });
+  }
+
+  // Cancel
+  if (interaction.customId === 'ticket_delete_cancel') {
+    await interaction.update({ content: '❌ Deletion cancelled.', embeds: [], components: [] });
+    return;
+  }
+
+  // Confirm — permanently delete
+  await interaction.deferUpdate();
+
+  await deleteTicketRecord(guildId, channelId);
+
+  try {
+    await interaction.channel.delete('Ticket permanently deleted.');
+  } catch (error) {
+    console.error('Ticket: failed to delete channel:', error.message);
   }
 }
 
