@@ -11,6 +11,7 @@ import {
   getTicketSettings,
   getTicketButtons,
   createTicketRecord,
+  updateTicket,
 } from '../utils/ticket-db.js';
 import {
   TICKET_TYPES,
@@ -151,6 +152,10 @@ export async function createTicketChannel(guild, creator, ticketType, extraData 
     robloxUsername: extraData.robloxUsername || null,
     giveawayProofStatus: extraData.giveawayProofStatus || null,
     giveawayProofUrl: extraData.giveawayProofUrl || null,
+    claimStaffId: null,
+    closeReason: null,
+    closedAt: null,
+    reopenedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -261,15 +266,24 @@ export async function sendTicketGreeting(channel, creator, ticketType, extraData
     );
   }
 
-  const closeButton = new ActionRowBuilder().addComponents(
+  const controlsRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('ticket_close')
-      .setLabel('Close Ticket')
+      .setCustomId('ticket_claim')
+      .setLabel('Claim')
+      .setEmoji('🛄')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('ticket_close_delete')
+      .setLabel('Close & Delete')
       .setEmoji('🔒')
       .setStyle(ButtonStyle.Danger)
   );
 
-  return channel.send({ content: `<@${creator.id}>`, embeds: [embed], components: [closeButton] });
+  const sent = await channel.send({ content: `<@${creator.id}>`, embeds: [embed], components: [controlsRow] });
+
+  await updateTicket(guild.id, channel.id, { greetingMessageId: sent.id, updatedAt: Date.now() });
+
+  return sent;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,4 +309,96 @@ export async function unlockTicketForCreator(guild, channel, creatorId, staffRol
     console.error('Ticket: failed to unlock channel:', error.message);
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Closed-ticket permission overwrites (creator can view but NOT send)
+// ---------------------------------------------------------------------------
+
+export function buildClosedPermissionOverwrites(guild, creatorId, staffRoleId) {
+  const overwrites = [
+    {
+      id: guild.id,
+      deny: [PermissionFlagsBits.ViewChannel],
+    },
+    {
+      id: creatorId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.ReadMessageHistory,
+      ],
+      deny: [PermissionFlagsBits.SendMessages],
+    },
+    {
+      id: guild.members.me.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.ManageMessages,
+      ],
+    },
+  ];
+
+  if (staffRoleId) {
+    overwrites.push({
+      id: staffRoleId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ],
+    });
+  }
+
+  return overwrites;
+}
+
+export async function lockTicketForCreator(guild, channel, creatorId, staffRoleId) {
+  const overwrites = buildClosedPermissionOverwrites(guild, creatorId, staffRoleId);
+  try {
+    await channel.permissionOverwrites.set(overwrites);
+    return true;
+  } catch (error) {
+    console.error('Ticket: failed to lock channel for closed state:', error.message);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ticket control rows (open / closed states)
+// ---------------------------------------------------------------------------
+
+export function buildOpenTicketControls(claimStaffId) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_claim')
+      .setLabel(claimStaffId ? `Claimed by staff` : 'Claim')
+      .setEmoji('🛄')
+      .setStyle(claimStaffId ? ButtonStyle.Secondary : ButtonStyle.Primary)
+      .setDisabled(!!claimStaffId),
+    new ButtonBuilder()
+      .setCustomId('ticket_close_delete')
+      .setLabel('Close & Delete')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger)
+  );
+  return row;
+}
+
+export function buildClosedTicketControls() {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('ticket_reopen')
+      .setLabel('Reopen')
+      .setEmoji('🔓')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('ticket_close_delete')
+      .setLabel('Close & Delete')
+      .setEmoji('🔒')
+      .setStyle(ButtonStyle.Danger)
+  );
+  return row;
 }
