@@ -191,7 +191,7 @@ export async function handleTicketSetupInteraction(interaction) {
     if (!components) {
       const embed = await getTicketSettingsEmbed(guildId);
       return interaction.editReply({
-        content: '⚠️ No ticket options are configured. Use `/add button` to add ticket options first.',
+        content: '⚠️ No ticket options are configured. Use `/addbutton` to add ticket options first.',
         embeds: [embed],
         components: getTicketSettingsComponents(),
       });
@@ -654,8 +654,7 @@ export async function handleTicketClaimButton(interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// 🔒 Close & Delete button — shows close-reason dropdown (if configured) or
-// a confirmation step for permanent deletion.
+// 🔒 Close & Delete button — Ticket Staff / Admins only
 // ---------------------------------------------------------------------------
 
 export async function handleCloseDeleteButton(interaction) {
@@ -674,12 +673,11 @@ export async function handleCloseDeleteButton(interaction) {
 
   const settings = await getTicketSettings(guildId);
   const staffRoleId = settings?.ticketStaffRoleId;
-  const isCreator = ticket.creatorId === interaction.user.id;
   const staffMember = await isTicketStaff(interaction, staffRoleId);
 
-  if (!staffMember && !isCreator) {
+  if (!staffMember) {
     return interaction.reply({
-      content: 'You do not have permission to close this ticket.',
+      content: 'Only Ticket Staff or Administrators can close or delete tickets.',
       ephemeral: true,
     });
   }
@@ -769,12 +767,11 @@ export async function handleCloseReasonSelect(interaction) {
 
   const settings = await getTicketSettings(guildId);
   const staffRoleId = settings?.ticketStaffRoleId;
-  const isCreator = ticket.creatorId === interaction.user.id;
   const staffMember = await isTicketStaff(interaction, staffRoleId);
 
-  if (!staffMember && !isCreator) {
+  if (!staffMember) {
     return interaction.reply({
-      content: 'You do not have permission to close this ticket.',
+      content: 'Only Ticket Staff or Administrators can close or delete tickets.',
       ephemeral: true,
     });
   }
@@ -960,7 +957,7 @@ export async function handleTicketDeleteConfirm(interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /delete button — show configured ticket options in a dropdown
+// /deletebutton — show configured ticket options in a dropdown
 // ---------------------------------------------------------------------------
 
 export async function handleDeleteButtonSelect(interaction) {
