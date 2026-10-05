@@ -15,6 +15,7 @@ import {
 import { isAdmin } from '../utils/permissions.js';
 import { getSettings, saveSettings, getQuarantineSettings, saveQuarantineSettings } from '../utils/tracker-db.js';
 import { isValidUrl } from '../utils/validate.js';
+import { handleTicketSetupInteraction } from '../utils/ticket-interactions.js';
 
 // ---------------------------------------------------------------------------
 // Tracker Settings
@@ -234,6 +235,11 @@ function getSetupDashboardComponents() {
         .setCustomId('setup_mod_settings')
         .setLabel('Mod Settings')
         .setEmoji('🛡️')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('setup_ticket_settings')
+        .setLabel('Ticket Settings')
+        .setEmoji('🎫')
         .setStyle(ButtonStyle.Secondary)
     ),
   ];
@@ -331,6 +337,24 @@ async function validateTrackingChannel(guild, channelId) {
 
 export async function handleSetupInteraction(interaction) {
   const guildId = interaction.guild?.id;
+
+  // Delegate ticket-related setup interactions first
+  const ticketCustomIds = [
+    'setup_ticket_settings',
+    'ticket_set_panel_id',
+    'ticket_send_panel',
+    'ticket_select_category',
+    'ticket_select_staff_role',
+  ];
+
+  if (
+    (interaction.isButton() && ticketCustomIds.includes(interaction.customId)) ||
+    (interaction.isChannelSelectMenu() && interaction.customId === 'ticket_select_category') ||
+    (interaction.isRoleSelectMenu() && interaction.customId === 'ticket_select_staff_role')
+  ) {
+    await handleTicketSetupInteraction(interaction);
+    return;
+  }
 
   // ---- Buttons ----------------------------------------------------------
   if (interaction.isButton()) {
