@@ -65,6 +65,19 @@ export async function deleteTicketButton(guildId, buttonId) {
 }
 
 // ---------------------------------------------------------------------------
+// Close Reasons (per guild, configurable via /closebutton)
+// ---------------------------------------------------------------------------
+
+export async function getCloseReasons(guildId) {
+  const settings = await getTicketSettings(guildId);
+  return settings?.closeReasons || [];
+}
+
+export async function setCloseReasons(guildId, closeReasons) {
+  await saveTicketSettings(guildId, { closeReasons });
+}
+
+// ---------------------------------------------------------------------------
 // Ticket Records (individual tickets)
 // ---------------------------------------------------------------------------
 
