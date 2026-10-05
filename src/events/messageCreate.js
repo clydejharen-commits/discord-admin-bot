@@ -24,6 +24,19 @@ export async function execute(message) {
   const ticket = await getTicketByChannel(message.guild.id, message.channel.id);
 
   if (ticket) {
+    // -- Closed ticket: prevent the ticket creator from sending messages --
+    if (
+      ticket.status === 'closed' &&
+      message.author.id === ticket.creatorId
+    ) {
+      try {
+        await message.delete();
+      } catch (_) {
+        // ignore delete failures (missing permissions, already deleted, etc.)
+      }
+      return;
+    }
+
     // -- Giveaway: detect image proof from ticket creator --
     if (
       ticket.ticketType === TICKET_TYPES.GIVEAWAY &&

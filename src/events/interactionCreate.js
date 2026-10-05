@@ -2,8 +2,11 @@ import { handleSetupInteraction, handleAppearanceModalSubmit } from '../utils/se
 import {
   handleTicketPanelSelect,
   handleTicketModalSubmit,
-  handleTicketCloseButton,
-  handleTicketStateButton,
+  handleTicketClaimButton,
+  handleCloseDeleteButton,
+  handleCloseReasonSelect,
+  handleTicketReopenButton,
+  handleTicketDeleteConfirm,
   handleDeleteButtonSelect,
 } from '../utils/ticket-interactions.js';
 
@@ -129,21 +132,48 @@ export async function execute(interaction) {
     return;
   }
 
-  // Ticket close/reopen/delete buttons
+  // Close reason select menu
+  if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_close_reason_select') {
+    try {
+      await handleCloseReasonSelect(interaction);
+    } catch (error) {
+      console.error('Error handling close reason select:', error);
+
+      const payload = {
+        content: 'An error occurred while closing this ticket.',
+        ephemeral: true,
+      };
+
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(payload).catch(() => {});
+      } else {
+        await interaction.reply(payload).catch(() => {});
+      }
+    }
+    return;
+  }
+
+  // Ticket claim / close&delete / reopen / delete-confirm / delete-cancel buttons
   if (
     interaction.isButton() &&
-    (interaction.customId === 'ticket_close' ||
+    (interaction.customId === 'ticket_claim' ||
+      interaction.customId === 'ticket_close_delete' ||
       interaction.customId === 'ticket_reopen' ||
-      interaction.customId === 'ticket_delete')
+      interaction.customId === 'ticket_delete_confirm' ||
+      interaction.customId === 'ticket_delete_cancel')
   ) {
     try {
-      if (interaction.customId === 'ticket_close') {
-        await handleTicketCloseButton(interaction);
+      if (interaction.customId === 'ticket_claim') {
+        await handleTicketClaimButton(interaction);
+      } else if (interaction.customId === 'ticket_close_delete') {
+        await handleCloseDeleteButton(interaction);
+      } else if (interaction.customId === 'ticket_reopen') {
+        await handleTicketReopenButton(interaction);
       } else {
-        await handleTicketStateButton(interaction);
+        await handleTicketDeleteConfirm(interaction);
       }
     } catch (error) {
-      console.error('Error handling ticket state button:', error);
+      console.error('Error handling ticket button:', error);
 
       const payload = {
         content: 'An error occurred while handling this ticket action.',
